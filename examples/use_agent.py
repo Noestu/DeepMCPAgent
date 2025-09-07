@@ -14,6 +14,7 @@ from langchain_openai import ChatOpenAI
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from langchain.chat_models import init_chat_model
 
 
 async def main() -> None:
@@ -22,17 +23,28 @@ async def main() -> None:
 
     servers = {
         "math": HTTPServerSpec(
-            url="http://127.0.0.1:8000/mcp",
+            url="http://127.0.0.1:8000/mcp/math",
             transport="http",
         ),
     }
 
-    model = ChatOpenAI(model="gpt-4.1")
+    model = init_chat_model(
+        "llama3.1:8b",           # kein -instruct nötig
+        model_provider="ollama",
+        config={
+            "base_url": "http://127.0.0.1:11434",
+            "temperature": 0.2,
+        },
+    )
+
 
     graph, loader = await build_deep_agent(
         servers=servers,
         model=model,
-        instructions="You are a helpful agent. Use MCP math tools to solve problems."
+        instructions=( "You are a helpful agent. "
+        "When calling MCP tools, always pass ONLY the exact parameters defined "
+        "in the tool schema. "
+        "Do not include extra fields")
     )
 
     # Show discovered tools
@@ -45,7 +57,7 @@ async def main() -> None:
     console.print(table)
 
     # Run a query
-    query = "What is (3 + 5) * 7 using math tools?"
+    query = "What is (8 + 6) * 3 using math tools?"
     console.print(Panel.fit(query, title="User Query", style="bold magenta"))
 
     result = await graph.ainvoke({

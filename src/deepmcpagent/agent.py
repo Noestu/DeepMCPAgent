@@ -9,6 +9,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt import create_react_agent
+from deepagents import create_deep_agent
 
 from .clients import FastMCPMulti
 from .config import ServerSpec
@@ -67,9 +68,6 @@ async def build_deep_agent(
     sys_prompt = instructions or DEFAULT_SYSTEM_PROMPT
 
     try:
-        # Optional deep agent loop if the extra is installed.
-        from deepagents import create_deep_agent  # type: ignore
-
         graph = create_deep_agent(tools=tools, instructions=sys_prompt, model=chat)
     except ImportError:
         # Solid fallback with LangGraph's ReAct agent.
