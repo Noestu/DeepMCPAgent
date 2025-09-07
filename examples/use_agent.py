@@ -16,6 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 from langchain.chat_models import init_chat_model
 
+from deepmcpagent.prompt import UNIVERSAL_SYSTEM_PROMPT
 
 async def main() -> None:
     console = Console()
@@ -24,6 +25,10 @@ async def main() -> None:
     servers = {
         "math": HTTPServerSpec(
             url="http://127.0.0.1:8000/mcp/math",
+            transport="http",
+        ),
+        "sql": HTTPServerSpec(
+            url="http://127.0.0.1:8001/mcp/sql",
             transport="http",
         ),
     }
@@ -39,25 +44,34 @@ async def main() -> None:
 
 
     graph, loader = await build_deep_agent(
-        servers=servers,
-        model=model,
-        instructions=( "You are a helpful agent. "
-        "When calling MCP tools, always pass ONLY the exact parameters defined "
-        "in the tool schema. "
-        "Do not include extra fields")
+       servers=servers,
+       model=model,
+       instructions=UNIVERSAL_SYSTEM_PROMPT,
     )
+    
+    try:
+        all_infos = await loader.list_tool_info()
+        table = Table(title="Discovered MCP Tools", show_lines=True)
+        table.add_column("Name", style="cyan", no_wrap=True)
+        table.add_column("Description", style="green")
+        
+        forbidden = {"task", "plan", "subagent"}
+        
+        for t in all_infos:
+            table.add_row(t.name, t.description or "-")
+        console.print(table)
+        
+        if any(t.name in forbidden for t in all_infos):
+            tools = [t for t in await loader.get_tools() if t.name not in forbidden]
+            from langgraph.prebuilt import create_react_agent
+            graph = create_react_agent(model=model, tools=tools, state_modifier=UNIVERSAL_SYSTEM_PROMPT)
+    except Exception:
+        pass
 
-    # Show discovered tools
-    infos = await loader.list_tool_info()
-    table = Table(title="Discovered MCP Tools", show_lines=True)
-    table.add_column("Name", style="cyan", no_wrap=True)
-    table.add_column("Description", style="green")
-    for t in infos:
-        table.add_row(t.name, t.description or "-")
-    console.print(table)
-
-    # Run a query
-    query = "What is (8 + 6) * 3 using math tools?"
+    query = (
+        "Give me a high-level overview of the database contents. "
+        "List a few tables from the main schema and preview 5 rows from 1-2 relevant tables."
+    )
     console.print(Panel.fit(query, title="User Query", style="bold magenta"))
 
     result = await graph.ainvoke({
